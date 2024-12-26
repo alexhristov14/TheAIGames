@@ -5,7 +5,7 @@ class TicTacToeEnv:
         self.gamma = 0.9
         self.epsilon = 0.1
         self.lr = 0.1
-        self.episodes = 100000
+        self.episodes = 10000
 
         self.board = np.array([
             [0, 0, 0], 
@@ -67,16 +67,10 @@ class TicTacToeEnv:
         pass
 
     def opponent_move(self):
-        if self.episodes < 2000:
-            while True:
-                random_action = np.random.choice(self.actions)
-                rand_row, rand_col = random_action // 3, random_action % 3
-                if self.board[rand_row, rand_col] == 0:
-                    self.board[rand_row, rand_col] = 2
-                    break
-        
-        else:
-            self.greedy_policy(self.get_state())
+        opponent_action = self.greedy_policy(self.get_state())
+        if opponent_action is not None:
+            r, c = opponent_action // 3, opponent_action % 3
+            self.board[r, c] = 2
 
     def get_state(self):
         return tuple(self.board.flatten())
@@ -109,21 +103,38 @@ class TicTacToeEnv:
 
                 state = next_state
 
-            if episode%10000==0:
+            if episode%1000000==0:
                 print(f"Episode {episode+1} ended with reward: {total_reward}")
 
 
 
     def greedy_policy(self, state):
+        for action in self.actions:
+            row, col = action // 3, action % 3
+            if self.board[row, col] == 0:
+                self.board[row, col] = 1
+                if self.check_if_won():
+                    self.board[row, col] = 0
+                    return action
+                self.board[row, col] = 0
+
+        for action in self.actions:
+            row, col = action // 3, action % 3
+            if self.board[row, col] == 0:
+                self.board[row, col] = 2
+                if self.check_if_won():
+                    self.board[row, col] = 0
+                    return action
+                self.board[row, col] = 0
+
         valid_actions = [
             action for action in self.actions
             if self.board[action // 3, action % 3] == 0
         ]
         if not valid_actions:
-            return None  # No valid moves left
+            return None
         q_values = [self.q_table.get((state, action), 0) for action in valid_actions]
         return valid_actions[np.argmax(q_values)]
-
 
     def play_against_ai(self):
         while True:
