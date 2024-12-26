@@ -34,6 +34,18 @@ class ConnectFourEnv:
             return -1000000
         
         valid_moves = self.get_valid_moves()
+        best_move = None
+        
+
+    def simulate(self, action, player):
+        copy_board = self.boarboard.copy()
+        for row in range(copy_board.shape[0]-1, -1, -1):
+            if copy_board[row, action] == 0:
+                copy_board[row, action] = player
+                break
+
+        return copy_board
+
         
     def check_if_won(self, player):
         rows, cols = self.board.shape
