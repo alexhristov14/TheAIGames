@@ -10,7 +10,14 @@ class ChessEnv:
         }
 
         self.notation_to_piece = {
-            "N": 4, "K": 6, "Q": 5, "R": 3, "B": 4
+            "N": 3, "K": 6, "Q": 5, "R": 3, "B": 4
+        }
+
+        self.how_pieces_move = {
+            "N": [(2, 1), (2, -1), (-2, 1), (-2, -1), (1, 2), (1, -2), (-1, 2), (-1, -2)],
+            "R": [(1,0), (-1,0), (0,1), (0,-1)],
+            "B": [(1,1), (-1,-1), (-1,1), (1,-1)],
+            "K": [(1,0), (-1,0), (0,1), (0,-1), (1,1), (-1,-1), (-1,1), (1,-1)]
         }
 
     
@@ -20,19 +27,26 @@ class ChessEnv:
 
     def step(self, action):
         piece, takes, next_state = self.process_notation(action)
-        print(next_state)
+        next_row, next_col = self.chess_map[next_state]
         if not self.notation_to_piece[piece]:
             return -10
 
-        start_row, start_col = self.get_piece_starting_location(piece, next_state)
-        
+        start_row, start_col = self.get_piece_starting_location(piece, next_state, "w")
         valid_moves = self.valid_moves(piece, start_row, start_col)
-        print(valid_moves)
+
+        if len(valid_moves) == 0:
+            return -10
+
+        self.board[next_row, next_col] = self.notation_to_piece[piece]
+        self.board[start_row, start_col] = 0
+        
 
     def render(self):
         symbols = np.vectorize(lambda x: self.piece_map.get(x, "·"))(self.board)
         for row in symbols:
             print(" ".join(row))
+        
+        print('\n')
 
     def reset(self):
         for c in range(8):
@@ -47,8 +61,7 @@ class ChessEnv:
         valid_moves = []
 
         if piece=="N":
-            knight_moves = [(2, 1), (2, -1), (-2, 1), (-2, -1), 
-                            (1, 2), (1, -2), (-1, 2), (-1, -2)]
+            knight_moves = self.how_pieces_move[piece]
 
             for dr, dc in knight_moves:
                 next_row, next_col = start_row+dr, start_col+dc
@@ -56,7 +69,7 @@ class ChessEnv:
                     valid_moves.append((next_row, next_col))
 
         elif piece=="B":
-            bishop_moves = [(1,1), (-1,-1), (-1,1), (1,-1)]
+            bishop_moves = self.how_pieces_move[piece]
 
             for dr, dc in bishop_moves:
                 for i in range(1, 8):
@@ -82,8 +95,7 @@ class ChessEnv:
                         break
 
         elif piece=="K":
-            king_moves = [(1,0), (-1,0), (0,1), (0,-1),
-                            (1,1), (-1,-1), (-1,1), (1,-1)]
+            king_moves = self.how_pieces_move[piece]
 
             for dr, dc in king_moves:
                 next_row, next_col = start_row+dr, start_col+dc
@@ -95,8 +107,33 @@ class ChessEnv:
 
         return valid_moves
 
-    def get_piece_starting_location(self, piece, next_state):
-        pass
+    def get_piece_starting_location(self, piece, next_state, player):
+        target_row, target_col = self.chess_map[next_state]
+        directions = self.how_pieces_move[piece]
+
+        if piece == "N":
+            for dr, dc in directions:
+                r, c = target_row+dr, target_col+dc
+                if 0 <= r < 8 and 0 <= c < 8:
+                    if self.board[r, c] == 3 and player == "w":
+                        return r, c
+
+                    elif self.board[r, c] == -3 and player == "b":
+                        return r, c
+
+        elif piece == "B":
+            for dr, dc in directions:
+                for i in range(1, 8):
+                    r, c = target_row+(dr*i), target_col+(dc*i)
+                    if 0 <= r < 8 and 0 <= c < 8:
+                        if self.board[r, c] == 4 and player=="w":
+                            return r, c
+                        elif self.board[r, c] == -4 and player=="b":
+                            return r, c
+                    else:
+                        break
+
+        return None, None
 
 
     def process_notation(self, action):
@@ -131,4 +168,6 @@ class ChessEnv:
 
 
 env = ChessEnv()
-env.step("Kc4")
+env.render()
+env.step("Na3")
+env.render()
