@@ -7,14 +7,6 @@ class ConnectFourEnv:
         self.depth = 4
         self.episodes = 10
 
-    def step(self, action):
-        if action < 0 or action > self.board.shape[1]:
-            return -10
-
-        for r in range(self.board.shape[0] - 1, -1, -1):
-            if self.board[r, action] == 0:
-                self.board[r, action] = 1
-
     def reset(self):
         self.board = np.zeros((6,7))
 
@@ -27,23 +19,25 @@ class ConnectFourEnv:
 
     def minimax(self, depth, maximazingPlayer, alpha, beta):
         if self.check_if_won(1):
-            return 1000000
-
+            return None, 1000000
         elif self.check_if_won(2):
-            return -1000000
-        
-        elif depth == 0 or self.is_draw(): # or draw
-            return None, self.evaluate_board()
+            return None, -1000000
+        elif depth == 0 or self.is_draw():
+            return None, self.evaluate_board(1 if maximazingPlayer else 2)
         
         valid_moves = self.get_valid_moves()
-        best_move = None
+        if len(valid_moves) == 0:
+            return None, 0
+
+        best_move = valid_moves[0]
 
         if maximazingPlayer:
             max_eval = float('-inf')
             for move in valid_moves:
-                copy_board = simulate(move, 1)
-                depth = depth - 1
-                _, evaluation = self.minimax(depth, False, alpha, beta)
+                board_backup = self.board.copy()
+                self.play_this_move(move, 1)
+                _, evaluation = self.minimax(depth-1, False, alpha, beta)
+                self.board = board_backup
                 if evaluation > max_eval:
                     max_eval = evaluation
                     best_move = move
@@ -52,14 +46,14 @@ class ConnectFourEnv:
                     break
             return best_move, max_eval
 
-
         else:
             min_eval = float('inf')
             for move in valid_moves:
-                copy_board = simulate(move, 2)
-                depth = depth - 1
-                _, evaluation = self.minimax(depth, True, alpha, beta)
-                if evalutaion < min_eval:
+                board_backup = self.board.copy()
+                self.play_this_move(move, 2)
+                _, evaluation = self.minimax(depth-1, True, alpha, beta)
+                self.board = board_backup
+                if evaluation < min_eval:
                     min_eval = evaluation
                     best_move = move
                 beta = min(beta, evaluation)
@@ -67,9 +61,8 @@ class ConnectFourEnv:
                     break
             return best_move, min_eval
 
-
     def simulate(self, action, player):
-        copy_board = self.boarboard.copy()
+        copy_board = self.board.copy()
         for row in range(copy_board.shape[0]-1, -1, -1):
             if copy_board[row, action] == 0:
                 copy_board[row, action] = player
@@ -78,7 +71,40 @@ class ConnectFourEnv:
         return copy_board
 
     def evaluate_board(self, player):
-        pass
+        score = 0
+        rows, cols = self.board.shape
+
+        center_column = [self.board[row][len(self.board[0])//2] for row in range(len(self.board))]
+        score += np.sum(np.array(center_column) == player) * 3
+
+        for r in range(rows):
+            for c in range(cols):
+                if self.board[r][c] == player:
+                    score += self.evaluate_position(player, r, c)
+    
+        return score
+
+    def evaluate_position(self, player, row, col):
+        score = 0
+        directions = [(1, 0), (0, 1), (1, 1), (1, -1)]
+
+        for dr, dc in directions:
+            count = 0
+            for i in range(4):
+                r, c = row + dr * i, col + dc * i
+                if 0 <= r < self.board.shape[0] and 0 <= c < self.board.shape[1] and self.board[r, c] == player:
+                    count += 1
+                else:
+                    break
+
+            if count == 4:
+                score += 1000
+            elif count == 3:
+                score += 50
+            elif count == 2:
+                score += 10
+
+        return score
         
         
     def check_if_won(self, player):
@@ -102,50 +128,66 @@ class ConnectFourEnv:
         return False
 
     def get_valid_moves(self):
+        valid = self.actions.copy()
         for c in range(self.board.shape[1]):
             if self.board[0, c] != 0:
-                valid = np.delete(self.actions, c)
-
+                valid = valid[valid != c]
         return valid
 
     def is_draw(self):
         return all(self.board[0, c] != 0 for c in range(len(self.board[0])))
 
-    def get_state(self):
-        return tuple(self.board.flatten())
-
     def play_this_move(self, action, player):
         for r in range(self.board.shape[0] - 1, -1, -1):
                 if self.board[r, action] == 0:
                     self.board[r, action] = player
+                    break
 
     def play_the_ai(self):
-        env.reset()
+        self.reset()
+        game_over = False
 
-        while True:    
-            if self.is_draw():
-                print("Its a draw!")
-                break
-            env.render()
-            col = input("Choose a column: ")
-            col -= 1
-            if col < 1 or col > 7:
-                print("Please choose again!")
-                continue
+        while not game_over:
+            self.render()
 
-            self.play_this_move(col)
-
+            while True:
+                try:
+                    col = int(input("Choose a column (1-7): ")) - 1
+                    if 0 <= col < 7 and self.board[0, col] == 0:
+                        break
+                    print("Invalid move! Please choose again.")
+                except ValueError:
+                    print("Please enter a number between 1 and 7.")
+            
+            self.play_this_move(col, 1)
+            
             if self.check_if_won(1):
-                print("Player 1 won!")
+                self.render()
+                print("You won! Congratulations!")
+                game_over = True
                 break
-        
-            move, _ self.minimax(4, True, float('-inf'), float('inf'))
+                
+            if self.is_draw():
+                self.render()
+                print("It's a draw!")
+                game_over = True
+                break
 
-            self.play_this_move(move)
-
+            print("AI is thinking...")
+            move, _ = self.minimax(self.depth, True, float('-inf'), float('inf'))
+            self.play_this_move(move, 2)
+            
             if self.check_if_won(2):
-                print("Player 1 won!")
-                break            
+                self.render()
+                print("AI won!")
+                game_over = True
+                break
+                
+            if self.is_draw():
+                self.render()
+                print("It's a draw!")
+                game_over = True
+                break          
 
 
 env = ConnectFourEnv()
