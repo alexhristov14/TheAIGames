@@ -78,7 +78,6 @@ class ConnectFourEnv:
         return copy_board
 
     def evaluate_board(self, player):
-        # if self.check_if_won(1)
         pass
         
         
@@ -119,21 +118,6 @@ class ConnectFourEnv:
         for r in range(self.board.shape[0] - 1, -1, -1):
                 if self.board[r, action] == 0:
                     self.board[r, action] = player
-
-    def train_ai(self):
-        for episode in range(self.episodes):
-            env.reset()
-            state = self.get_state()
-            done = False
-
-            while not done:
-                if np.random.random() < self.epsilon:
-                    action = np.random.choice(self.actions)
-                
-                else:
-                    action, _ = self.minimax(state)
-
-                self.step(action)
 
     def play_the_ai(self):
         env.reset()
