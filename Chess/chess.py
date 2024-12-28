@@ -266,9 +266,9 @@ class ChessEnv:
 
         notation_data = list(action)
 
-        # if notation_data[2] == "=":
-        #     pass
-            # self.process_pawn_promotion()
+        if len(notation_data) > 2 and notation_data[2] == "=":
+            print("promoting")
+            self.process_pawn_promotion()
 
         if len(notation_data) == 2 or notation_data[0] in "abcdefgh":
             return self.process_pawn(action)
@@ -327,30 +327,56 @@ class ChessEnv:
         return chess_map
 
     def is_in_check(self):
+        kings_location = self.get_kings_location()
+        # print("kings location: ", kings_location)
+        self.change_current_player()
+        for piece, _ in self.notation_to_piece.items():
+            # print(self.get_piece_starting_location(piece, kings_location))
+            if self.get_piece_starting_location(piece, kings_location) != (None, None):
+                # print(self.get_piece_starting_location(piece, kings_location))
+                return True
+        self.change_current_player()
+        return False
+
+    def change_current_player(self):
+        self.current_player = "b" if self.current_player == "w" else "w"
+
+    def get_kings_location(self):
         if self.current_player == "w":
             kings_row, kings_col = np.where(self.board == 6)
         else:
             kings_row, kings_col = np.where(self.board == -6)
 
         kings_location = self.index_to_chess_notation(kings_row[0], kings_col[0])
-        self.change_current_player()
-        for piece, _ in self.notation_to_piece.items():
-            print(piece, ": ", self.get_piece_starting_location(piece, kings_location))
-        self.change_current_player()
-
-    def change_current_player(self):
-        self.current_player = "b" if self.current_player == "w" else "w"
+        return kings_location
 
     def index_to_chess_notation(self, row, col):
         column = chr(ord('a') + col)
         row_number = 8 - row
         return f"{column}{row_number}"
 
-
     def is_checkmate(self):
-        pass
+        kings_location = self.get_kings_location()
+        directions = self.how_pieces_move["K"]
+        row, col = self.chess_map[kings_location]
+        is_checkmate = True
+
+        for dr, dc in directions:
+            copy_board = self.board.copy()
+            next_row, next_col = row+dr, col+dc
+            if 0 <= next_row < 8 and 0 <= next_col < 8 and self.board[next_row, next_col] >= 0:
+                self.board[next_row, next_col] = 6 if self.current_player == "w" else -6
+                self.board[row, col] = 0
+                # print("next_row, next_col: ", next_row, next_col, " and it is in check?: ", self.is_in_check())
+                if not self.is_in_check():
+                    env.render()
+                    is_checkmate = False
+                self.board = copy_board
+        
+        return is_checkmate
 
     def is_stalemate(self):
+        # pseudocode: if not in check rn but in check everywhere else
         pass
 
     def train_ai(self):
@@ -368,9 +394,12 @@ env.step("Nc6")
 env.step("Bc4")
 env.step("Nf6")
 env.step("Qxf7")
-env.render()
+# env.step("Ke7")
+# env.render()
 
-env.is_in_check()
+# env.is_in_check()
+print(env.is_checkmate())
+env.render()
 
 # while True:
 #     move = str(input("Enter a chess move in algebreic notation: "))
