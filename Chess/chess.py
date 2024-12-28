@@ -10,7 +10,7 @@ class ChessEnv:
         }
 
         self.notation_to_piece = {
-            "N": 3, "K": 6, "Q": 5, "R": 3, "B": 4
+            "N": 3, "K": 6, "Q": 5, "R": 2, "B": 4, "P": 7
         }
 
         self.how_pieces_move = {
@@ -18,10 +18,13 @@ class ChessEnv:
             "R": [(1,0), (-1,0), (0,1), (0,-1)],
             "B": [(1,1), (-1,-1), (-1,1), (1,-1)],
             "K": [(1,0), (-1,0), (0,1), (0,-1), (1,1), (-1,-1), (-1,1), (1,-1)]
+            "P": [(-1,0), (-1,-1), (-1,1)]
         }
 
     
         self.chess_map = self.create_chess_map()
+
+        self.current_player = "w"
 
         self.reset()
 
@@ -31,14 +34,16 @@ class ChessEnv:
         if not self.notation_to_piece[piece]:
             return -10
 
-        start_row, start_col = self.get_piece_starting_location(piece, next_state, "w")
+        start_row, start_col = self.get_piece_starting_location(piece, next_state, self.current_player)
         valid_moves = self.valid_moves(piece, start_row, start_col)
 
         if len(valid_moves) == 0:
             return -10
 
-        self.board[next_row, next_col] = self.notation_to_piece[piece]
+        self.board[next_row, next_col] = self.notation_to_piece[piece] if self.current_player == "w" else -self.notation_to_piece[piece]
         self.board[start_row, start_col] = 0
+
+        self.current_player = "b" if self.current_player == "w" else "w"
         
 
     def render(self):
@@ -111,14 +116,27 @@ class ChessEnv:
         target_row, target_col = self.chess_map[next_state]
         directions = self.how_pieces_move[piece]
 
-        if piece == "N":
+        if piece == "P":
+            dr, dc = directions[0]
+            r, c = target_row+dr, target_col+dc
+            if 0 <= r < 8 and 0 <= c < 8:
+                if self.board[r, c] == 7 and self.current_player == "w":
+                        return r, c
+
+                elif self.board[r, c] == -7 and self.current_player == "b":
+                    return r, c
+
+            elif (r == 7 and self.current_player == "b") or (r==0 and self.current_player == "w"):
+                self.process_pawn_promotion(c)
+
+        elif piece == "N":
             for dr, dc in directions:
                 r, c = target_row+dr, target_col+dc
                 if 0 <= r < 8 and 0 <= c < 8:
-                    if self.board[r, c] == 3 and player == "w":
+                    if self.board[r, c] == 3 and self.current_player == "w":
                         return r, c
 
-                    elif self.board[r, c] == -3 and player == "b":
+                    elif self.board[r, c] == -3 and self.current_player == "b":
                         return r, c
 
         elif piece == "B":
@@ -133,22 +151,55 @@ class ChessEnv:
                     else:
                         break
 
+        elif piece == "R":
+            for dr, dc in directions:
+                for i in range(1, 8):
+                    r, c = target_row+(dr*i), target_col+(dc*i)
+                    if 0 <= r < 8 and 0 <= c < 8:
+                        if self.board[r, c] == 2 and player=="w":
+                            return r, c
+                        elif self.board[r, c] == -2 and player=="b":
+                            return r, c
+
         return None, None
 
 
     def process_notation(self, action):
-        takes = False
         notation_data = list(action)
-        piece = notation_data[0]
+        if len(notation_data) == 2 or notation_data[0] in "abcdefgh":
+            return self.process_pawn(action)
+        else:
+            takes = False
+            piece = notation_data[0]
+            if notation_data[1] == "x":
+                takes = True
+                next_state = notation_data[2:]
+            else:
+                next_state = notation_data[1:]
+
+            next_state = "".join(next_state)
+
+            return piece, takes, next_state
+
+    def process_pawn(self, action):
+        notation_data = list(action)
+        piece = "P"
+        takes = False
+
         if notation_data[1] == "x":
             takes = True
             next_state = notation_data[2:]
         else:
-            next_state = notation_data[1:]
+            next_state = notation_data[:]
 
         next_state = "".join(next_state)
 
+        print(next_state)
+
         return piece, takes, next_state
+
+    def process_pawn_promotion(self, col):
+        pass
 
     def create_chess_map(self):
         chess_map = {}
@@ -169,5 +220,8 @@ class ChessEnv:
 
 env = ChessEnv()
 env.render()
-env.step("Na3")
-env.render()
+
+while True:
+    move = str(input("Enter a chess move in algebreic notation: "))
+    env.step(move)
+    env.render()
