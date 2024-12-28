@@ -66,7 +66,7 @@ class ChessEnv:
         self.board[next_row, next_col] = self.notation_to_piece[piece] if self.current_player == "w" else -self.notation_to_piece[piece]
         self.board[start_row, start_col] = 0
 
-        self.current_player = "b" if self.current_player == "w" else "w"
+        self.change_current_player()
         
 
     def render(self):
@@ -169,7 +169,7 @@ class ChessEnv:
 
     def get_piece_starting_location(self, piece, next_state, takes=False):
         target_row, target_col = self.chess_map[next_state]
-        directions = self.how_pieces_move[piece]
+        directions = self.how_pieces_move[piece] if piece != "Q" else None
 
         if piece == "P":
             if self.current_player == "b":
@@ -238,11 +238,38 @@ class ChessEnv:
                         elif self.board[r, c] == -2 and self.current_player=="b":
                             return r, c
 
+        elif piece == "Q":
+            all_directions = self.how_pieces_move["R"] + self.how_pieces_move["B"]
+
+            for dr, dc in all_directions:
+                for i in range(1, 8):
+                    r, c = target_row + (dr * i), target_col + (dc * i)
+
+                    if 0 <= r < 8 and 0 <= c < 8:
+                        if self.board[r, c] == 5 and self.current_player == "w":
+                            return r, c
+                        elif self.board[r, c] == -5 and self.current_player == "b":
+                            return r, c
+                        elif self.board[r, c] == 5 and self.current_player == "w":
+                            return r, c
+                        elif self.board[r, c] == -5 and self.current_player == "b":
+                            return r, c
+                    else:
+                        break
+
         return None, None
 
 
     def process_notation(self, action):
+        if action == "O-O" or action == "O-O-O":
+            return self.process_castling(action)
+
         notation_data = list(action)
+
+        # if notation_data[2] == "=":
+        #     pass
+            # self.process_pawn_promotion()
+
         if len(notation_data) == 2 or notation_data[0] in "abcdefgh":
             return self.process_pawn(action)
         else:
@@ -273,6 +300,13 @@ class ChessEnv:
 
         return piece, takes, next_state
 
+    def process_castling(self, action):
+        piece = "hello"
+        takes = False
+        next_state = ""
+
+        return piece, takes, next_state
+
     def process_pawn_promotion(self, col):
         pass
 
@@ -292,6 +326,24 @@ class ChessEnv:
 
         return chess_map
 
+    def is_in_check(self):
+        kings_location = np.where(self.board == 6)
+        # TODO: make if as a chess state like e1
+
+        self.change_current_player()
+        for piece, _ in self.notation_to_piece.items():
+            print(self.get_piece_starting_location(piece, "e1"))
+        self.change_current_player()
+
+    def change_current_player(self):
+        self.current_player = "b" if self.current_player == "w" else "w"
+
+    def is_checkmate(self):
+        pass
+
+    def is_stalemate(self):
+        pass
+
     def train_ai(self):
         pass
 
@@ -300,15 +352,17 @@ class ChessEnv:
 
 
 env = ChessEnv()
+env.step("e4")
+env.step("d5")
+env.step("a3")
+env.step("dxe4")
+env.step("a4")
+env.step("Qxd2")
 env.render()
-# env.step("e4")
-# env.render()
-# env.step("d5")
-# env.render()
-# env.step("exd5")
-# env.render()
 
-while True:
-    move = str(input("Enter a chess move in algebreic notation: "))
-    env.step(move)
-    env.render()
+env.is_in_check()
+
+# while True:
+#     move = str(input("Enter a chess move in algebreic notation: "))
+#     env.step(move)
+#     env.render()
