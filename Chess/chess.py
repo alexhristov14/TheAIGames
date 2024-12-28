@@ -21,6 +21,23 @@ class ChessEnv:
             "P": [(-1,0), (-2, 0), (-1,-1), (-1,1)]
         }
 
+        self.piece_material = {
+            "P": 1,
+            "R": 5,
+            "B": 3,
+            "N": 3,
+            "Q": 9,
+            "K": 100
+        }
+
+        self.piece_index_to_material = {
+            1: 1,
+            2: 5,
+            3: 3,
+            4: 3,
+            5: 9,
+            6: 100
+        }
     
         self.chess_map = self.create_chess_map()
 
@@ -29,16 +46,22 @@ class ChessEnv:
         self.reset()
 
     def step(self, action):
+        reward = 0
+
         piece, takes, next_state = self.process_notation(action)
         next_row, next_col = self.chess_map[next_state]
         if not self.notation_to_piece[piece]:
             return -10
 
-        start_row, start_col = self.get_piece_starting_location(piece, next_state, self.current_player)
+        start_row, start_col = self.get_piece_starting_location(piece, next_state, takes)
         valid_moves = self.valid_moves(piece, start_row, start_col, takes)
 
         if len(valid_moves) == 0:
             return -10
+
+        if takes:
+            material = self.takes_material(piece, start_row, start_col, next_row, next_col)
+            reward += material
 
         self.board[next_row, next_col] = self.notation_to_piece[piece] if self.current_player == "w" else -self.notation_to_piece[piece]
         self.board[start_row, start_col] = 0
@@ -113,6 +136,7 @@ class ChessEnv:
         elif piece=="Q":
             valid_moves = self.valid_moves("R", start_row, start_col) + self.valid_moves("B", start_row, start_col)
 
+
         return valid_moves
 
     def get_pawn_moves(self, piece, start_row, start_col, takes):
@@ -120,7 +144,7 @@ class ChessEnv:
 
         direction = -1 if self.current_player == "w" else 1
         valid_moves = []
-
+    
         if not takes:
             dr, dc = pawn_moves[0]
             next_row, next_col = start_row + (dr * direction), start_col + dc
@@ -135,25 +159,28 @@ class ChessEnv:
 
         else:
             for dr, dc in pawn_moves[2:]:
-                next_row, next_col = start_row + dr * direction, start_col + dc
-                if (
-                    0 <= next_row < 8 and
-                    0 <= next_col < 8 and
-                    self.board[next_row][next_col] != "" and
-                    self.board[next_row][next_col].islower() if self.current_player == "w" else self.board[next_row][next_col].isupper()
-                ):
-                    valid_moves.append((next_row, next_col))
+                next_row, next_col = start_row - (dr * direction), start_col + dc
+                if self.board[next_row, next_col] != 0:
+                    if 0 <= next_row < 8 and 0 <= next_col < 8:
+                        valid_moves.append((next_row, next_col))
 
         return valid_moves
 
 
-    def get_piece_starting_location(self, piece, next_state, player):
+    def get_piece_starting_location(self, piece, next_state, takes=False):
         target_row, target_col = self.chess_map[next_state]
         directions = self.how_pieces_move[piece]
 
         if piece == "P":
             if self.current_player == "b":
                 directions = [(x * -1, y * -1) for x, y in directions]
+
+            if takes:
+                for dr, dc in directions[2:]:
+                    r, c = target_row-dr, target_col+dc
+                    if 0 <= r < 8 and 0 <= c < 8:
+                        if np.absolute(self.board[r, c]) == 1:
+                                return r, c
 
             directions = directions[:2] if (target_row == 3 and self.current_player == "b") or (target_row == 4 and self.current_player == "w") else [directions[0]]
 
@@ -194,9 +221,9 @@ class ChessEnv:
                 for i in range(1, 8):
                     r, c = target_row+(dr*i), target_col+(dc*i)
                     if 0 <= r < 8 and 0 <= c < 8:
-                        if self.board[r, c] == 4 and player=="w":
+                        if self.board[r, c] == 4 and self.current_player=="w":
                             return r, c
-                        elif self.board[r, c] == -4 and player=="b":
+                        elif self.board[r, c] == -4 and self.current_player=="b":
                             return r, c
                     else:
                         break
@@ -206,9 +233,9 @@ class ChessEnv:
                 for i in range(1, 8):
                     r, c = target_row+(dr*i), target_col+(dc*i)
                     if 0 <= r < 8 and 0 <= c < 8:
-                        if self.board[r, c] == 2 and player=="w":
+                        if self.board[r, c] == 2 and self.current_player=="w":
                             return r, c
-                        elif self.board[r, c] == -2 and player=="b":
+                        elif self.board[r, c] == -2 and self.current_player=="b":
                             return r, c
 
         return None, None
@@ -249,6 +276,12 @@ class ChessEnv:
     def process_pawn_promotion(self, col):
         pass
 
+    def takes_material(self, piece, start_row, start_col, end_row, end_col):
+        piece_taken = self.board[end_row, end_col]
+        material = self.piece_index_to_material[np.absolute(piece_taken)]
+
+        return material
+
     def create_chess_map(self):
         chess_map = {}
 
@@ -268,6 +301,12 @@ class ChessEnv:
 
 env = ChessEnv()
 env.render()
+# env.step("e4")
+# env.render()
+# env.step("d5")
+# env.render()
+# env.step("exd5")
+# env.render()
 
 while True:
     move = str(input("Enter a chess move in algebreic notation: "))
