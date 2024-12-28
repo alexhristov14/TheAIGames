@@ -327,16 +327,25 @@ class ChessEnv:
         return chess_map
 
     def is_in_check(self):
-        kings_location = np.where(self.board == 6)
-        # TODO: make if as a chess state like e1
+        if self.current_player == "w":
+            kings_row, kings_col = np.where(self.board == 6)
+        else:
+            kings_row, kings_col = np.where(self.board == -6)
 
+        kings_location = self.index_to_chess_notation(kings_row[0], kings_col[0])
         self.change_current_player()
         for piece, _ in self.notation_to_piece.items():
-            print(self.get_piece_starting_location(piece, "e1"))
+            print(piece, ": ", self.get_piece_starting_location(piece, kings_location))
         self.change_current_player()
 
     def change_current_player(self):
         self.current_player = "b" if self.current_player == "w" else "w"
+
+    def index_to_chess_notation(self, row, col):
+        column = chr(ord('a') + col)
+        row_number = 8 - row
+        return f"{column}{row_number}"
+
 
     def is_checkmate(self):
         pass
@@ -353,11 +362,12 @@ class ChessEnv:
 
 env = ChessEnv()
 env.step("e4")
-env.step("d5")
-env.step("a3")
-env.step("dxe4")
-env.step("a4")
-env.step("Qxd2")
+env.step("e5")
+env.step("Qh5")
+env.step("Nc6")
+env.step("Bc4")
+env.step("Nf6")
+env.step("Qxf7")
 env.render()
 
 env.is_in_check()
