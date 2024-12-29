@@ -92,18 +92,18 @@ class ChessEnv:
         self.board[0, :] = -back_row
         self.board[7, :] = back_row
 
-    def get_all_valid_moves(self, player="w"):
+    def get_all_valid_moves(self):
         all_pieces = [1, 2, 3, 4, 5, 6]
         all_valid_moves = []
 
-        if player=="b":
-            all_pieces*=-1
+        if self.current_player == "b":
+            all_pieces = [-1,-2,-3,-4,-5,-6]
 
         for piece in all_pieces:
             indexes = np.where(self.board == piece)
             for i in range(len(indexes[0])):
                 row, col = indexes[0][i], indexes[1][i]
-                p = self.piece_to_notation[piece]
+                p = self.piece_to_notation[np.absolute(piece)]
                 print(p, ": ", self.valid_moves(p, row, col))
 
     def valid_moves(self, piece, start_row, start_col, takes=False):
@@ -117,7 +117,7 @@ class ChessEnv:
 
             for dr, dc in knight_moves:
                 next_row, next_col = start_row+dr, start_col+dc
-                if 0 <= next_row < 8 and 0 <= next_col < 8:
+                if 0 <= next_row < 8 and 0 <= next_col < 8 and self.board[next_row, next_col]==0:
                     valid_moves.append((next_row, next_col))
 
         elif piece=="B":
@@ -126,7 +126,7 @@ class ChessEnv:
             for dr, dc in bishop_moves:
                 for i in range(1, 8):
                     next_row, next_col = start_row+(dr*i), start_col+(dc*i)
-                    if 0 <= next_row < 8 and 0 <= next_col < 8:
+                    if 0 <= next_row < 8 and 0 <= next_col < 8 and self.board[next_row, next_col]==0:
                         valid_moves.append((next_row, next_col))
                         if self.board[next_row, next_col] != 0:
                             break
@@ -139,7 +139,7 @@ class ChessEnv:
             for dr, dc in rook_moves:
                 for i in range(1, 8):
                     next_row, next_col = start_row+(dr*i), start_col+(dc*i)
-                    if 0 <= next_row < 8 and 0 <= next_col < 8:
+                    if 0 <= next_row < 8 and 0 <= next_col < 8 and self.board[next_row, next_col]==0:
                         valid_moves.append((next_row, next_col))
                         if self.board[next_row, next_col] != 0:
                             break
@@ -151,7 +151,7 @@ class ChessEnv:
 
             for dr, dc in king_moves:
                 next_row, next_col = start_row+dr, start_col+dc
-                if 0 <= next_row < 8 and 0 <= next_col < 8:
+                if 0 <= next_row < 8 and 0 <= next_col < 8 and self.board[next_row, next_col]==0:
                     valid_moves.append((next_row, next_col))
 
         elif piece=="Q":
@@ -163,13 +163,13 @@ class ChessEnv:
     def get_pawn_moves(self, piece, start_row, start_col, takes):
         pawn_moves = self.how_pieces_move[piece]
 
-        direction = -1 if self.current_player == "w" else 1
+        direction = 1 if self.current_player == "w" else -1
         valid_moves = []
     
         if not takes:
             dr, dc = pawn_moves[0]
             next_row, next_col = start_row + (dr * direction), start_col + dc
-            if 0 <= next_row < 8 and 0 <= next_col < 8:
+            if 0 <= next_row < 8 and 0 <= next_col < 8 and self.board[next_row, next_col] == 0:
                 valid_moves.append((next_row, next_col))
 
                 if (start_row == 6 and self.current_player == "w") or (start_row == 1 and self.current_player == "b"):
@@ -492,8 +492,6 @@ env = ChessEnv()
 # env.step("Bd7")
 # env.step("O-O")
 
-print(env.get_all_valid_moves())
-
 env.render()
 
 # env.step("e4")
@@ -509,7 +507,8 @@ env.render()
 # print(env.is_checkmate())
 
 
-# while True:
-#     move = str(input("Enter a chess move in algebreic notation: "))
-#     env.step(move)
-#     env.render()
+while True:
+    print(env.get_all_valid_moves())
+    move = str(input("Enter a chess move in algebreic notation: "))
+    env.step(move)
+    env.render()
