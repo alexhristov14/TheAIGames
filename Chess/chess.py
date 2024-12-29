@@ -53,6 +53,7 @@ class ChessEnv:
         reward = 0
 
         piece, takes, next_state, castling = self.process_notation(action)
+
         if castling:
             return 10
 
@@ -64,14 +65,15 @@ class ChessEnv:
         valid_moves = self.valid_moves(piece, start_row, start_col, takes)
         all_valid_moves = self.get_all_valid_moves()
 
-        # print(valid_moves)
+        print(valid_moves)
 
-        if len(valid_moves) == 0:
-            return -10
+        # if len(valid_moves) == 0:
+        #     return -10
 
         if takes:
             material = self.takes_material(piece, start_row, start_col, next_row, next_col)
             reward += material
+            print("material: ", material)
 
         self.board[next_row, next_col] = self.notation_to_piece[piece] if self.current_player == "w" else -self.notation_to_piece[piece]
         self.board[start_row, start_col] = 0
@@ -175,7 +177,6 @@ class ChessEnv:
 
     def get_pawn_moves(self, piece, start_row, start_col, takes):
         pawn_moves = self.how_pieces_move[piece]
-
         direction = 1 if self.current_player == "w" else -1
         valid_moves = []
     
@@ -193,7 +194,7 @@ class ChessEnv:
 
         else:
             for dr, dc in pawn_moves[2:]:
-                next_row, next_col = start_row - (dr * direction), start_col + dc
+                next_row, next_col = start_row + (dr * direction), start_col + dc
                 if self.board[next_row, next_col] != 0:
                     if 0 <= next_row < 8 and 0 <= next_col < 8:
                         valid_moves.append((next_row, next_col))
@@ -529,7 +530,7 @@ class ChessEnv:
             number_of_that_piece = np.where(self.board == piece)
             # reward += ((piece_count-len(number_of_that_piece[0]))* self.piece_index_to_material(piece))
             # print(((piece_count-len(number_of_that_piece[0]))* self.piece_index_to_material(piece)))
-            print(piece_count, len(number_of_that_piece[0]))
+            print(piece_count - len(number_of_that_piece[0]))
 
     def train_ai(self):
         pass
@@ -541,6 +542,11 @@ class ChessEnv:
 env = ChessEnv()
 
 env.step("e4")
+env.step("d5")
+env.step("exd5")
+# env.step("e5")
+
+
 # env.step("e5")
 # env.step("Nf3")
 # env.step("Nf6")
