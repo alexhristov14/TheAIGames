@@ -54,7 +54,7 @@ class ChessEnv:
 
         piece, takes, next_state, castling = self.process_notation(action)
         if castling:
-            return
+            return 10
 
         next_row, next_col = self.chess_map[next_state]
         if not self.notation_to_piece[piece]:
@@ -62,7 +62,10 @@ class ChessEnv:
 
         start_row, start_col = self.get_piece_starting_location(piece, next_state, takes)
         valid_moves = self.valid_moves(piece, start_row, start_col, takes)
-                
+        all_valid_moves = self.get_all_valid_moves()
+
+        # print(valid_moves)
+
         if len(valid_moves) == 0:
             return -10
 
@@ -73,8 +76,10 @@ class ChessEnv:
         self.board[next_row, next_col] = self.notation_to_piece[piece] if self.current_player == "w" else -self.notation_to_piece[piece]
         self.board[start_row, start_col] = 0
 
+        if self.is_checkmate():
+            return 1000
+
         self.change_current_player()
-        
 
     def render(self):
         symbols = np.vectorize(lambda x: self.piece_map.get(x, "·"))(self.board)
@@ -104,7 +109,15 @@ class ChessEnv:
             for i in range(len(indexes[0])):
                 row, col = indexes[0][i], indexes[1][i]
                 p = self.piece_to_notation[np.absolute(piece)]
-                print(p, ": ", self.valid_moves(p, row, col))
+                for move in self.valid_moves(p, row, col):
+                    m = "".join((p, self.index_to_chess_notation(move[0], move[1]))) if p != "P" else self.index_to_chess_notation(move[0], move[1])
+                    all_valid_moves.append(m)
+                    # print(p, ": ", self.index_to_chess_notation(move[0], move[1]))
+                # print(p, ": ", self.valid_moves(p, row, col))
+                # print(p, self.index_to_chess_notation(row, col))
+                # all_valid_moves.append(self.valid_moves(p, row, col))
+        
+        return all_valid_moves
 
     def valid_moves(self, piece, start_row, start_col, takes=False):
         valid_moves = []
@@ -359,8 +372,6 @@ class ChessEnv:
 
         return promotion_piece, takes, next_state, False
 
-
-
     def takes_material(self, piece, start_row, start_col, end_row, end_col):
         piece_taken = self.board[end_row, end_col]
         material = self.piece_index_to_material[np.absolute(piece_taken)]
@@ -379,12 +390,10 @@ class ChessEnv:
 
     def is_in_check(self):
         kings_location = self.get_kings_location()
-        # print("Current kings location: ", kings_location)
         
         self.change_current_player()
         for piece, _ in self.notation_to_piece.items():
             if self.get_piece_starting_location(piece, kings_location) != (None, None):
-                # print(self.get_piece_starting_location(piece, kings_location))
                 self.change_current_player()
                 return True
         self.change_current_player()
@@ -452,6 +461,9 @@ class ChessEnv:
 
         return True
 
+    def simulate(self, action, player):
+        reward = self.step(action)
+
     def minimax(self, depth, maximazingPlayer, alpha=float('-inf'), beta=float('inf')):
         if self.is_checkmate("w"):
             return None, 1000
@@ -464,16 +476,60 @@ class ChessEnv:
         
         valid_moves = self.get_all_valid_moves()
 
+        best_move = valid_moves[0]
+
         if maximazingPlayer:
             max_eval = float("-inf")
+            for move in valid_moves:
+                board_backup = self.board.copy()
+                self.simulate(move, "w")
+                _, evaluation = self.minimax(depth-1, False, alpha, beta)
+                self.board = board_backup
+                if evaluation > max_eval:
+                    max_eval = evaluation
+                    best_move = move
+                alpha = max(alpha, evaluation)
+                if beta <= alpha:
+                    break
+            return best_move, max_eval
 
 
         else:
             min_eval = float("inf")
-
+            for move in valid_moves:
+                board_backup = self.board.copy()
+                self.simulate(move, "b")
+                _, evaluation = self.minimax(depth-1, True, alpha, beta)
+                self.board = board_backup
+                if evaluation < min_eval:
+                    min_eval = evaluation
+                    best_move = move
+                beta = min(beta, evaluation)
+                if beta <= alpha:
+                    break
+            return best_move, min_eval
 
     def evaluate_board(self, player):
-        pass
+        reward = 0
+        pieces = {
+            1: 8,
+            2: 2,
+            3: 2,
+            4: 2,
+            5: 1
+        }
+
+        if self.is_checkmate():
+            return 1000 if player == "b" else -1000
+
+        if self.is_in_check():
+            reward += 10 if player == "b" else -10
+
+        for piece, piece_count in pieces.items():
+            number_of_that_piece = np.where(self.board == piece)
+            # reward += ((piece_count-len(number_of_that_piece[0]))* self.piece_index_to_material(piece))
+            # print(((piece_count-len(number_of_that_piece[0]))* self.piece_index_to_material(piece)))
+            print(piece_count, len(number_of_that_piece[0]))
 
     def train_ai(self):
         pass
@@ -484,13 +540,17 @@ class ChessEnv:
 
 env = ChessEnv()
 
-# env.step("e4")
+env.step("e4")
 # env.step("e5")
 # env.step("Nf3")
 # env.step("Nf6")
 # env.step("Bd3")
 # env.step("Bd7")
 # env.step("O-O")
+
+# print(env.get_all_valid_moves())
+
+print(env.evaluate_board("w"))
 
 env.render()
 
@@ -507,8 +567,7 @@ env.render()
 # print(env.is_checkmate())
 
 
-while True:
-    print(env.get_all_valid_moves())
-    move = str(input("Enter a chess move in algebreic notation: "))
-    env.step(move)
-    env.render()
+# while True:
+#     move = str(input("Enter a chess move in algebreic notation: "))
+#     env.step(move)
+#     env.render()
