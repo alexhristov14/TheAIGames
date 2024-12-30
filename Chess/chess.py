@@ -1,4 +1,6 @@
 import numpy as np
+import time
+import os
 
 class ChessEnv:
     def __init__(self):
@@ -108,9 +110,6 @@ class ChessEnv:
         if self.current_player == "b":
             all_pieces = [-1,-2,-3,-4,-5, -6]
 
-        # if self.is_in_check():
-        #     return []
-
         for piece in all_pieces:
             indexes = np.where(self.board == piece)
             for i in range(len(indexes[0])):
@@ -127,6 +126,27 @@ class ChessEnv:
         valid_moves = self.get_all_valid_moves()
         self.change_current_player()
         return valid_moves
+
+    def get_best_valid_moves(self, valid_moves, player):
+        # taking a piece -> check -> quiet move
+        prioritized_moves = []
+
+        for move in valid_moves:
+            if 'x' in move:
+                prioritized_moves.append(move)
+            else:
+                board_copy = self.board.copy()
+                self.step(move)
+                if self.is_in_check():  # Check if the move results in a check
+                    prioritized_moves.append(move)
+                self.board = board_copy
+
+        while len(prioritized_moves) < 10:
+            prioritized_moves.append(np.random.choice(valid_moves))
+
+        prioritized_moves = list(set(prioritized_moves))[:10]
+
+        return prioritized_moves
 
     def valid_moves(self, piece, start_row, start_col, takes=False):
         valid_moves = []
@@ -404,7 +424,7 @@ class ChessEnv:
         
         king_row, king_col = king_pos[0][0], king_pos[1][0]
         opponent_moves = self.get_all_valid_opponent_moves()
-        # print("number of opponent moves: ", len(opponent_moves))
+
         for move in opponent_moves:
             target_row, target_col = self.chess_map[move[-2:]]
             if target_row == king_row and target_col == king_col:
@@ -494,6 +514,8 @@ class ChessEnv:
             return None, -1000
         
         valid_moves = self.get_all_valid_moves()
+        # valid_moves = self.get_best_valid_moves(valid_moves)
+
         if not valid_moves:
             return None, self.evaluate_board("w" if maximizingPlayer else "b")
 
@@ -719,6 +741,10 @@ env.render()
 while True:
     move = str(input("Enter a chess move in algebreic notation: "))
     env.step(move)
-    action, _  = env.minimax(3, True)
+    action, _  = env.minimax(2, True)
+    start_time = time.time()
     env.step(action)
+    print("it took ", time.time() - start_time, " seconds")
+    time.sleep(2)
+    os.system("clear")
     env.render()
