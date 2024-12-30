@@ -50,35 +50,40 @@ class ChessEnv:
         self.reset()
 
     def step(self, action):
-        reward = 0
-
-        piece, takes, next_state, castling = self.process_notation(action)
-
-        if castling:
-            return 10
-
-        next_row, next_col = self.chess_map[next_state]
-        if not self.notation_to_piece[piece]:
+        try:
+            piece, takes, next_state, castling = self.process_notation(action)
+            
+            if castling:
+                return 10
+                
+            if next_state not in self.chess_map:
+                return -10
+                
+            next_row, next_col = self.chess_map[next_state]
+            start_row, start_col = self.get_piece_starting_location(piece, next_state, takes)
+            
+            if start_row is None or start_col is None:
+                return -10
+                
+            valid_moves = self.valid_moves(piece, start_row, start_col, takes)
+            if (next_row, next_col) not in valid_moves:
+                return -10
+                
+            reward = 0
+            if takes:
+                reward = self.takes_material(piece, start_row, start_col, next_row, next_col)
+                
+            self.board[next_row, next_col] = self.notation_to_piece[piece] if self.current_player == "w" else -self.notation_to_piece[piece]
+            self.board[start_row, start_col] = 0
+            
+            if self.is_checkmate():
+                return 1000
+                
+            self.change_current_player()
+            return reward
+            
+        except Exception:
             return -10
-
-        start_row, start_col = self.get_piece_starting_location(piece, next_state, takes)
-        valid_moves = self.valid_moves(piece, start_row, start_col, takes)
-        all_valid_moves = self.get_all_valid_moves()
-
-        if len(valid_moves) == 0:
-            return -10
-
-        if takes:
-            material = self.takes_material(piece, start_row, start_col, next_row, next_col)
-            reward += material
-
-        self.board[next_row, next_col] = self.notation_to_piece[piece] if self.current_player == "w" else -self.notation_to_piece[piece]
-        self.board[start_row, start_col] = 0
-
-        if self.is_checkmate():
-            return 1000
-
-        self.change_current_player()
 
     def render(self):
         symbols = np.vectorize(lambda x: self.piece_map.get(x, "·"))(self.board)
@@ -479,30 +484,34 @@ class ChessEnv:
 
         return True
 
-    def simulate(self, action, player):
-        reward = self.step(action)
-
-    def minimax(self, depth, maximazingPlayer, alpha=float('-inf'), beta=float('inf')):
-        if self.is_checkmate() and maximazingPlayer:
+    def minimax(self, depth, maximizingPlayer, alpha=float('-inf'), beta=float('inf')):
+        if depth == 0:
+            return None, self.evaluate_board("w" if maximizingPlayer else "b")
+            
+        if self.is_checkmate() and maximizingPlayer:
             return None, 1000
-    
         elif self.is_checkmate():
             return None, -1000
-
-        elif depth == 0:
-            None, self.evaluate_board("w" if maximazingPlayer else "b")
         
         valid_moves = self.get_all_valid_moves()
+        if not valid_moves:
+            return None, self.evaluate_board("w" if maximizingPlayer else "b")
 
         best_move = valid_moves[0]
+        current_player = "w" if maximizingPlayer else "b"
 
-        if maximazingPlayer:
+        if maximizingPlayer:
             max_eval = float("-inf")
             for move in valid_moves:
                 board_backup = self.board.copy()
-                self.simulate(move, "w")
+                player_backup = self.current_player
+                
+                self.step(move)
                 _, evaluation = self.minimax(depth-1, False, alpha, beta)
+                
                 self.board = board_backup
+                self.current_player = player_backup
+                
                 if evaluation > max_eval:
                     max_eval = evaluation
                     best_move = move
@@ -511,14 +520,18 @@ class ChessEnv:
                     break
             return best_move, max_eval
 
-
         else:
             min_eval = float("inf")
             for move in valid_moves:
                 board_backup = self.board.copy()
-                self.simulate(move, "b")
+                player_backup = self.current_player
+                
+                self.step(move)
                 _, evaluation = self.minimax(depth-1, True, alpha, beta)
+                
                 self.board = board_backup
+                self.current_player = player_backup
+                
                 if evaluation < min_eval:
                     min_eval = evaluation
                     best_move = move
@@ -528,29 +541,139 @@ class ChessEnv:
             return best_move, min_eval
 
     def evaluate_board(self, player):
-        reward = 0
-        pieces = {
-            1: 8,
-            2: 2,
-            3: 2,
-            4: 2,
-            5: 1
+        piece_values = {
+            'P': 100,
+            'N': 320,
+            'B': 330,
+            'R': 500,
+            'Q': 900,
+            'K': 20000
         }
-
+        
+        # Position bonuses for pieces
+        pawn_position = [
+            [0,  0,  0,  0,  0,  0,  0,  0],
+            [50, 50, 50, 50, 50, 50, 50, 50],
+            [10, 10, 20, 30, 30, 20, 10, 10],
+            [5,  5, 10, 25, 25, 10,  5,  5],
+            [0,  0,  0, 20, 20,  0,  0,  0],
+            [5, -5,-10,  0,  0,-10, -5,  5],
+            [5, 10, 10,-20,-20, 10, 10,  5],
+            [0,  0,  0,  0,  0,  0,  0,  0]
+        ]
+        
+        knight_position = [
+            [-50,-40,-30,-30,-30,-30,-40,-50],
+            [-40,-20,  0,  0,  0,  0,-20,-40],
+            [-30,  0, 10, 15, 15, 10,  0,-30],
+            [-30,  5, 15, 20, 20, 15,  5,-30],
+            [-30,  0, 15, 20, 20, 15,  0,-30],
+            [-30,  5, 10, 15, 15, 10,  5,-30],
+            [-40,-20,  0,  5,  5,  0,-20,-40],
+            [-50,-40,-30,-30,-30,-30,-40,-50]
+        ]
+        
+        bishop_position = [
+            [-20,-10,-10,-10,-10,-10,-10,-20],
+            [-10,  0,  0,  0,  0,  0,  0,-10],
+            [-10,  0,  5, 10, 10,  5,  0,-10],
+            [-10,  5,  5, 10, 10,  5,  5,-10],
+            [-10,  0, 10, 10, 10, 10,  0,-10],
+            [-10, 10, 10, 10, 10, 10, 10,-10],
+            [-10,  5,  0,  0,  0,  0,  5,-10],
+            [-20,-10,-10,-10,-10,-10,-10,-20]
+        ]
+        
+        rook_position = [
+            [0,  0,  0,  0,  0,  0,  0,  0],
+            [5, 10, 10, 10, 10, 10, 10,  5],
+            [-5,  0,  0,  0,  0,  0,  0, -5],
+            [-5,  0,  0,  0,  0,  0,  0, -5],
+            [-5,  0,  0,  0,  0,  0,  0, -5],
+            [-5,  0,  0,  0,  0,  0,  0, -5],
+            [-5,  0,  0,  0,  0,  0,  0, -5],
+            [0,  0,  0,  5,  5,  0,  0,  0]
+        ]
+        
+        queen_position = [
+            [-20,-10,-10, -5, -5,-10,-10,-20],
+            [-10,  0,  0,  0,  0,  0,  0,-10],
+            [-10,  0,  5,  5,  5,  5,  0,-10],
+            [-5,  0,  5,  5,  5,  5,  0, -5],
+            [0,  0,  5,  5,  5,  5,  0, -5],
+            [-10,  5,  5,  5,  5,  5,  0,-10],
+            [-10,  0,  5,  0,  0,  0,  0,-10],
+            [-20,-10,-10, -5, -5,-10,-10,-20]
+        ]
+        
+        king_position = [
+            [-30,-40,-40,-50,-50,-40,-40,-30],
+            [-30,-40,-40,-50,-50,-40,-40,-30],
+            [-30,-40,-40,-50,-50,-40,-40,-30],
+            [-30,-40,-40,-50,-50,-40,-40,-30],
+            [-20,-30,-30,-40,-40,-30,-30,-20],
+            [-10,-20,-20,-20,-20,-20,-20,-10],
+            [20, 20,  0,  0,  0,  0, 20, 20],
+            [20, 30, 10,  0,  0, 10, 30, 20]
+        ]
+        
+        position_tables = {
+            'P': pawn_position,
+            'N': knight_position,
+            'B': bishop_position,
+            'R': rook_position,
+            'Q': queen_position,
+            'K': king_position
+        }
+        
+        score = 0
+        multiplier = 1 if player == "w" else -1
+        
         if self.is_checkmate():
-            return 1000 if player == "b" else -1000
-
+            return -10000 * multiplier
         if self.is_in_check():
-            reward += 10 if player == "b" else -10
-
-        for piece, piece_count in pieces.items():
-            piece = -piece if player=="w" else piece
-            number_of_that_piece = np.where(self.board == piece)
-            reward += ((piece_count-len(number_of_that_piece[0]))* self.piece_index_to_material[np.absolute(piece)])
-            # print(((piece_count-len(number_of_that_piece[0]))* self.piece_index_to_material(piece)))
-            # print(piece_count - len(number_of_that_piece[0]))
-
-        return reward
+            score -= 50 * multiplier
+            
+        for row in range(8):
+            for col in range(8):
+                piece = self.board[row][col]
+                if piece != 0:
+                    is_white = piece > 0
+                    piece_type = self.piece_to_notation[abs(piece)]
+                    position_score = position_tables[piece_type][row][col]
+                    
+                    # Flip position tables for black pieces
+                    if not is_white:
+                        position_score = position_tables[piece_type][7-row][col]
+                    
+                    piece_score = piece_values[piece_type] + position_score
+                    score += piece_score if is_white else -piece_score
+        
+        # Evaluate development in early game (first 10 moves)
+        if sum(1 for row in self.board for piece in row if piece != 0) > 28:
+            # Penalize undeveloped pieces
+            back_rank = 7 if player == "w" else 0
+            score -= 10 * len([1 for piece in self.board[back_rank] if abs(piece) in [2,3,4]])  # Undeveloped R,N,B
+            
+        # Evaluate pawn structure
+        for col in range(8):
+            white_pawns = len([1 for row in range(8) if self.board[row][col] == 1])
+            black_pawns = len([1 for row in range(8) if self.board[row][col] == -1])
+            
+            # Penalize doubled pawns
+            if white_pawns > 1:
+                score -= 20
+            if black_pawns > 1:
+                score += 20
+            
+            # Penalize isolated pawns
+            if col > 0 and col < 7:
+                if white_pawns > 0 and sum(1 for row in range(8) for c in [col-1, col+1] if self.board[row][c] == 1) == 0:
+                    score -= 10
+                if black_pawns > 0 and sum(1 for row in range(8) for c in [col-1, col+1] if self.board[row][c] == -1) == 0:
+                    score += 10
+        
+        return score * multiplier
 
     def train_ai(self):
         pass
@@ -580,20 +703,22 @@ env.render()
 
 # print(env.evaluate_board("w"))
 
-env.step("e4")
-env.step("e5")
-env.step("Qh5")
-env.step("Nc6")
-env.step("Bc4")
-env.step("Nf6")
-env.step("Qxf7")
+# env.step("e4")
+# env.step("e5")
+# env.step("Qh5")
+# env.step("Nc6")
+# env.step("Bc4")
+# env.step("Nf6")
+# env.step("Qxf7")
 # env.step("Ke7")
 
-env.render()
-print(env.is_in_check())
-print("is it checkmate: ", env.is_checkmate())
+# env.render()
+# print(env.is_in_check())
+# print("is it checkmate: ", env.is_checkmate())
 
-# while True:
-#     move = str(input("Enter a chess move in algebreic notation: "))
-#     env.step(move)
-#     env.render()
+while True:
+    move = str(input("Enter a chess move in algebreic notation: "))
+    env.step(move)
+    action, _  = env.minimax(3, True)
+    env.step(action)
+    env.render()
