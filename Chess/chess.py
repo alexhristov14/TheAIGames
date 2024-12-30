@@ -428,33 +428,40 @@ class ChessEnv:
             return False
 
         all_moves = self.get_all_valid_moves()
-        print(all_moves)
-        original_board = self.board.copy()
-
+        
         for move in all_moves:
-            piece, takes, next_state, castling = self.process_notation(move)
-            next_row, next_col = self.chess_map[next_state]
-            start_row, start_col = self.get_piece_starting_location(piece, next_state, takes)
-
-            # print("start_row, start_col:", start_row, start_col)
-            # print("next_row, next_col: ", next_row, next_col)
-
+            original_board = self.board.copy()
+            original_player = self.current_player
+            
             try:
+                piece, takes, next_state, castling = self.process_notation(move)
+                if castling:
+                    continue
+                    
+                next_row, next_col = self.chess_map[next_state]
+                start_row, start_col = self.get_piece_starting_location(piece, next_state, takes)
+                
+                if start_row is None or start_col is None:
+                    continue
+                
                 self.board[next_row, next_col] = self.board[start_row, start_col]
                 self.board[start_row, start_col] = 0
-
-                print("self.is_in_check(): ", self.is_in_check(), piece, next_state)
-
+                
                 if not self.is_in_check():
                     self.board = original_board
+                    self.current_player = original_player
                     return False
-
+                    
                 self.board = original_board
-
-            except:
+                self.current_player = original_player
+                
+            except Exception as e:
                 self.board = original_board
+                self.current_player = original_player
+                continue
 
-        return True 
+        return True
+
 
     def is_stalemate(self):
         if self.is_in_check():
