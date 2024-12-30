@@ -65,15 +65,12 @@ class ChessEnv:
         valid_moves = self.valid_moves(piece, start_row, start_col, takes)
         all_valid_moves = self.get_all_valid_moves()
 
-        print(valid_moves)
-
-        # if len(valid_moves) == 0:
-        #     return -10
+        if len(valid_moves) == 0:
+            return -10
 
         if takes:
             material = self.takes_material(piece, start_row, start_col, next_row, next_col)
             reward += material
-            print("material: ", material)
 
         self.board[next_row, next_col] = self.notation_to_piece[piece] if self.current_player == "w" else -self.notation_to_piece[piece]
         self.board[start_row, start_col] = 0
@@ -104,7 +101,10 @@ class ChessEnv:
         all_valid_moves = []
 
         if self.current_player == "b":
-            all_pieces = [-1,-2,-3,-4,-5,-6]
+            all_pieces = [-1,-2,-3,-4,-5, -6]
+
+        # if self.is_in_check():
+        #     return []
 
         for piece in all_pieces:
             indexes = np.where(self.board == piece)
@@ -114,12 +114,14 @@ class ChessEnv:
                 for move in self.valid_moves(p, row, col):
                     m = "".join((p, self.index_to_chess_notation(move[0], move[1]))) if p != "P" else self.index_to_chess_notation(move[0], move[1])
                     all_valid_moves.append(m)
-                    # print(p, ": ", self.index_to_chess_notation(move[0], move[1]))
-                # print(p, ": ", self.valid_moves(p, row, col))
-                # print(p, self.index_to_chess_notation(row, col))
-                # all_valid_moves.append(self.valid_moves(p, row, col))
         
         return all_valid_moves
+
+    def get_all_valid_opponent_moves(self):
+        self.change_current_player()
+        valid_moves = self.get_all_valid_moves()
+        self.change_current_player()
+        return valid_moves
 
     def valid_moves(self, piece, start_row, start_col, takes=False):
         valid_moves = []
@@ -132,7 +134,7 @@ class ChessEnv:
 
             for dr, dc in knight_moves:
                 next_row, next_col = start_row+dr, start_col+dc
-                if 0 <= next_row < 8 and 0 <= next_col < 8 and self.board[next_row, next_col]==0:
+                if 0 <= next_row < 8 and 0 <= next_col < 8 and ((self.board[next_row, next_col]<=0 and self.current_player=="w") or (self.board[next_row, next_col]>=0 and self.current_player=="b")):
                     valid_moves.append((next_row, next_col))
 
         elif piece=="B":
@@ -141,7 +143,7 @@ class ChessEnv:
             for dr, dc in bishop_moves:
                 for i in range(1, 8):
                     next_row, next_col = start_row+(dr*i), start_col+(dc*i)
-                    if 0 <= next_row < 8 and 0 <= next_col < 8 and self.board[next_row, next_col]==0:
+                    if 0 <= next_row < 8 and 0 <= next_col < 8 and ((self.board[next_row, next_col]<=0 and self.current_player=="w") or (self.board[next_row, next_col]>=0 and self.current_player=="b")):
                         valid_moves.append((next_row, next_col))
                         if self.board[next_row, next_col] != 0:
                             break
@@ -149,12 +151,12 @@ class ChessEnv:
                         break
 
         elif piece=="R":
-            rook_moves = [(1,0), (-1,0), (0,1), (0,-1)]
+            rook_moves = self.how_pieces_move[piece]
 
             for dr, dc in rook_moves:
                 for i in range(1, 8):
                     next_row, next_col = start_row+(dr*i), start_col+(dc*i)
-                    if 0 <= next_row < 8 and 0 <= next_col < 8 and self.board[next_row, next_col]==0:
+                    if 0 <= next_row < 8 and 0 <= next_col < 8 and ((self.board[next_row, next_col]<=0 and self.current_player=="w") or (self.board[next_row, next_col]>=0 and self.current_player=="b")):
                         valid_moves.append((next_row, next_col))
                         if self.board[next_row, next_col] != 0:
                             break
@@ -166,12 +168,11 @@ class ChessEnv:
 
             for dr, dc in king_moves:
                 next_row, next_col = start_row+dr, start_col+dc
-                if 0 <= next_row < 8 and 0 <= next_col < 8 and self.board[next_row, next_col]==0:
+                if 0 <= next_row < 8 and 0 <= next_col < 8 and ((self.board[next_row, next_col]<=0 and self.current_player=="w") or (self.board[next_row, next_col]>=0 and self.current_player=="b")):
                     valid_moves.append((next_row, next_col))
 
         elif piece=="Q":
             valid_moves = self.valid_moves("R", start_row, start_col) + self.valid_moves("B", start_row, start_col)
-
 
         return valid_moves
 
@@ -389,16 +390,20 @@ class ChessEnv:
 
         return chess_map
 
-    def is_in_check(self):
-        kings_location = self.get_kings_location()
-        
-        self.change_current_player()
-        for piece, _ in self.notation_to_piece.items():
-            if self.get_piece_starting_location(piece, kings_location) != (None, None):
-                self.change_current_player()
-                return True
-        self.change_current_player()
 
+    def is_in_check(self):
+        king = 6 if self.current_player == "w" else -6
+        king_pos = np.where(self.board == king)
+        if king_pos[0].size == 0:  # King not found
+            return False
+        
+        king_row, king_col = king_pos[0][0], king_pos[1][0]
+        opponent_moves = self.get_all_valid_opponent_moves()
+        # print("number of opponent moves: ", len(opponent_moves))
+        for move in opponent_moves:
+            target_row, target_col = self.chess_map[move[-2:]]
+            if target_row == king_row and target_col == king_col:
+                return True
         return False
 
     def change_current_player(self):
@@ -422,29 +427,34 @@ class ChessEnv:
         if not self.is_in_check():
             return False
 
-        kings_location = self.get_kings_location()
-        king_row, king_col = self.chess_map[kings_location]
-        directions = self.how_pieces_move["K"]
-        
-        for dr, dc in directions:
-            next_row, next_col = king_row + dr, king_col + dc
-            if (0 <= next_row < 8 and 0 <= next_col < 8):
-                if (self.current_player == "w" and self.board[next_row, next_col] <= 0) or \
-                (self.current_player == "b" and self.board[next_row, next_col] >= 0):
-                    original_board = self.board.copy()
-                    king_value = 6 if self.current_player == "w" else -6
-                    self.board[next_row, next_col] = king_value
-                    self.board[king_row, king_col] = 0
-                    
-                    if not self.is_in_check():
-                        self.board = original_board
-                        return False
-                        
+        all_moves = self.get_all_valid_moves()
+        print(all_moves)
+        original_board = self.board.copy()
+
+        for move in all_moves:
+            piece, takes, next_state, castling = self.process_notation(move)
+            next_row, next_col = self.chess_map[next_state]
+            start_row, start_col = self.get_piece_starting_location(piece, next_state, takes)
+
+            # print("start_row, start_col:", start_row, start_col)
+            # print("next_row, next_col: ", next_row, next_col)
+
+            try:
+                self.board[next_row, next_col] = self.board[start_row, start_col]
+                self.board[start_row, start_col] = 0
+
+                print("self.is_in_check(): ", self.is_in_check(), piece, next_state)
+
+                if not self.is_in_check():
                     self.board = original_board
-        
-        # TODO: Make it so other pieces might protect it by taking the checking pieces or by blocking
-        
-        return True
+                    return False
+
+                self.board = original_board
+
+            except:
+                self.board = original_board
+
+        return True 
 
     def is_stalemate(self):
         if self.is_in_check():
@@ -466,10 +476,10 @@ class ChessEnv:
         reward = self.step(action)
 
     def minimax(self, depth, maximazingPlayer, alpha=float('-inf'), beta=float('inf')):
-        if self.is_checkmate("w"):
+        if self.is_checkmate() and maximazingPlayer:
             return None, 1000
     
-        elif self.is_checkmate("b"):
+        elif self.is_checkmate():
             return None, -1000
 
         elif depth == 0:
@@ -527,10 +537,13 @@ class ChessEnv:
             reward += 10 if player == "b" else -10
 
         for piece, piece_count in pieces.items():
+            piece = -piece if player=="w" else piece
             number_of_that_piece = np.where(self.board == piece)
-            # reward += ((piece_count-len(number_of_that_piece[0]))* self.piece_index_to_material(piece))
+            reward += ((piece_count-len(number_of_that_piece[0]))* self.piece_index_to_material[np.absolute(piece)])
             # print(((piece_count-len(number_of_that_piece[0]))* self.piece_index_to_material(piece)))
-            print(piece_count - len(number_of_that_piece[0]))
+            # print(piece_count - len(number_of_that_piece[0]))
+
+        return reward
 
     def train_ai(self):
         pass
@@ -541,9 +554,11 @@ class ChessEnv:
 
 env = ChessEnv()
 
-env.step("e4")
-env.step("d5")
-env.step("exd5")
+env.render()
+
+# env.step("e4")
+# env.step("d5")
+# env.step("exd5")
 # env.step("e5")
 
 
@@ -556,22 +571,20 @@ env.step("exd5")
 
 # print(env.get_all_valid_moves())
 
-print(env.evaluate_board("w"))
+# print(env.evaluate_board("w"))
 
-env.render()
-
-# env.step("e4")
-# env.step("e5")
-# env.step("Qh5")
-# env.step("Nc6")
-# env.step("Bc4")
-# env.step("Nf6")
-# env.step("Qxf7")
+env.step("e4")
+env.step("e5")
+env.step("Qh5")
+env.step("Nc6")
+env.step("Bc4")
+env.step("Nf6")
+env.step("Qxf7")
 # env.step("Ke7")
 
-# env.is_in_check()
-# print(env.is_checkmate())
-
+env.render()
+print(env.is_in_check())
+print("is it checkmate: ", env.is_checkmate())
 
 # while True:
 #     move = str(input("Enter a chess move in algebreic notation: "))
