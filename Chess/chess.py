@@ -1,6 +1,4 @@
 import numpy as np
-import time
-import os
 
 class ChessEnv:
     def __init__(self):
@@ -63,11 +61,12 @@ class ChessEnv:
                 
             next_row, next_col = self.chess_map[next_state]
             start_row, start_col = self.get_piece_starting_location(piece, next_state, takes)
-            
+
             if start_row is None or start_col is None:
                 return -10
                 
             valid_moves = self.valid_moves(piece, start_row, start_col, takes)
+
             if (next_row, next_col) not in valid_moves:
                 return -10
                 
@@ -89,10 +88,13 @@ class ChessEnv:
 
     def render(self):
         symbols = np.vectorize(lambda x: self.piece_map.get(x, "·"))(self.board)
-        for row in symbols:
-            print(" ".join(row))
-        
-        print('\n')
+        print("  a b c d e f g h")
+        print("  ---------------")
+        for i, row in enumerate(symbols):
+            print(f"{8-i}|{' '.join(row)}|{8-i}")
+        print("  ---------------")
+        print("  a b c d e f g h")
+        print(f"\nCurrent player: {'White' if self.current_player == 'w' else 'Black'}")
 
     def reset(self):
         for c in range(8):
@@ -215,7 +217,7 @@ class ChessEnv:
                 if (start_row == 6 and self.current_player == "w") or (start_row == 1 and self.current_player == "b"):
                     dr, dc = pawn_moves[1]
                     next_row, next_col = start_row + (dr * direction), start_col + dc
-                    if 0 <= next_row < 8:
+                    if 0 <= next_row < 8 and self.board[next_row, next_col] == 0:
                         valid_moves.append((next_row, next_col))
 
         else:
@@ -281,6 +283,10 @@ class ChessEnv:
             for dr, dc in directions:
                 for i in range(1, 8):
                     r, c = target_row+(dr*i), target_col+(dc*i)
+
+                    if np.absolute(self.board[r, c]) not in [0, 4]:
+                        break
+
                     if 0 <= r < 8 and 0 <= c < 8:
                         if self.board[r, c] == 4 and self.current_player=="w":
                             return r, c
@@ -293,6 +299,10 @@ class ChessEnv:
             for dr, dc in directions:
                 for i in range(1, 8):
                     r, c = target_row+(dr*i), target_col+(dc*i)
+
+                    if np.absolute(self.board[r, c]) not in [0, 2]:
+                        break
+
                     if 0 <= r < 8 and 0 <= c < 8:
                         if self.board[r, c] == 2 and self.current_player=="w":
                             return r, c
@@ -317,6 +327,24 @@ class ChessEnv:
                             return r, c
                     else:
                         break
+
+        elif piece == "K":
+            all_directions = self.how_pieces_move["K"]
+
+            for dr, dc in all_directions:
+                r, c = target_row + dr, target_col + dc
+                if 0 <= r < 8 and 0 <= c < 8:
+                    if self.board[r, c] == 6 and self.current_player == "w":
+                        return r, c
+                    elif self.board[r, c] == -6 and self.current_player == "b":
+                        return r, c
+                    elif self.board[r, c] == 6 and self.current_player == "w":
+                        return r, c
+                    elif self.board[r, c] == -6 and self.current_player == "b":
+                        return r, c
+                else:
+                    break
+
 
         return None, None
 
@@ -491,76 +519,44 @@ class ChessEnv:
     def is_stalemate(self):
         if self.is_in_check():
             return False
+        return len(self.get_all_valid_moves()) == 0 and not self.is_in_check() 
 
-        directions = self.how_pieces_move["K"]
-        kings_location = self.get_kings_location()
-        r, c = self.chess_map[kings_location]
-    
-        for dr, dc in directions:
-            next_row, next_col = r+dr, c+dc
-            if 0 <= next_row < 8 and 0 <= next_col < 8:
-                if not self.is_in_check:
-                    return False
+    def minimax(self, depth, maximizing_player, alpha=float('-inf'), beta=float('inf')):
+        if depth == 0 or self.is_checkmate():
+            return None, self.evaluate_board("w" if maximizing_player else "b")
 
-        return True
-
-    def minimax(self, depth, maximizingPlayer, alpha=float('-inf'), beta=float('inf')):
-        if depth == 0:
-            return None, self.evaluate_board("w" if maximizingPlayer else "b")
-            
-        if self.is_checkmate() and maximizingPlayer:
-            return None, 1000
-        elif self.is_checkmate():
-            return None, -1000
-        
+        current_player = "w" if maximizing_player else "b"
         valid_moves = self.get_all_valid_moves()
-        # valid_moves = self.get_best_valid_moves(valid_moves)
-
+        
         if not valid_moves:
-            return None, self.evaluate_board("w" if maximizingPlayer else "b")
+            return None, self.evaluate_board(current_player)
 
         best_move = valid_moves[0]
-        current_player = "w" if maximizingPlayer else "b"
-
-        if maximizingPlayer:
-            max_eval = float("-inf")
-            for move in valid_moves:
-                board_backup = self.board.copy()
-                player_backup = self.current_player
+        best_value = float("-inf") if maximizing_player else float("inf")
+        
+        for move in valid_moves:
+            board_copy = self.board.copy()
+            player_copy = self.current_player
+            
+            reward = self.step(move)
+            _, value = self.minimax(depth - 1, not maximizing_player, alpha, beta)
+            
+            self.board = board_copy
+            self.current_player = player_copy
+            
+            if maximizing_player and value > best_value:
+                best_value = value
+                best_move = move
+                alpha = max(alpha, value)
+            elif not maximizing_player and value < best_value:
+                best_value = value
+                best_move = move
+                beta = min(beta, value)
                 
-                self.step(move)
-                _, evaluation = self.minimax(depth-1, False, alpha, beta)
+            if beta <= alpha:
+                break
                 
-                self.board = board_backup
-                self.current_player = player_backup
-                
-                if evaluation > max_eval:
-                    max_eval = evaluation
-                    best_move = move
-                alpha = max(alpha, evaluation)
-                if beta <= alpha:
-                    break
-            return best_move, max_eval
-
-        else:
-            min_eval = float("inf")
-            for move in valid_moves:
-                board_backup = self.board.copy()
-                player_backup = self.current_player
-                
-                self.step(move)
-                _, evaluation = self.minimax(depth-1, True, alpha, beta)
-                
-                self.board = board_backup
-                self.current_player = player_backup
-                
-                if evaluation < min_eval:
-                    min_eval = evaluation
-                    best_move = move
-                beta = min(beta, evaluation)
-                if beta <= alpha:
-                    break
-            return best_move, min_eval
+        return best_move, best_value
 
     def evaluate_board(self, player):
         piece_values = {
@@ -704,47 +700,98 @@ class ChessEnv:
         pass
 
 
-env = ChessEnv()
 
-env.render()
-
-# env.step("e4")
-# env.step("d5")
-# env.step("exd5")
-# env.step("e5")
-
-
-# env.step("e5")
-# env.step("Nf3")
-# env.step("Nf6")
-# env.step("Bd3")
-# env.step("Bd7")
-# env.step("O-O")
-
-# print(env.get_all_valid_moves())
-
-# print(env.evaluate_board("w"))
-
-# env.step("e4")
-# env.step("e5")
-# env.step("Qh5")
-# env.step("Nc6")
-# env.step("Bc4")
-# env.step("Nf6")
-# env.step("Qxf7")
-# env.step("Ke7")
-
-# env.render()
-# print(env.is_in_check())
-# print("is it checkmate: ", env.is_checkmate())
-
-while True:
-    move = str(input("Enter a chess move in algebreic notation: "))
-    env.step(move)
-    action, _  = env.minimax(2, True)
-    start_time = time.time()
-    env.step(action)
-    print("it took ", time.time() - start_time, " seconds")
-    time.sleep(2)
-    os.system("clear")
+def play_chess():
+    env = ChessEnv()
     env.render()
+
+    ai_or_not = str(input("Do you want to play against the AI? (y/n): "))
+    if ai_or_not.lower() == "n":
+            while True:
+                move = str(input("Enter a chess move in algebreic notation: "))
+                reward = env.step(move)
+
+                if reward == -10:
+                    print("Invalid move, please try again")
+                    continue
+
+                elif env.is_checkmate():
+                    print("Checkmate, game over!")
+                    exit()
+
+                elif env.is_stalemate():
+                    print("Stalemate, game over!")
+                    exit()
+                
+                elif env.is_in_check():
+                    print("You're in check")
+
+                env.render()
+
+    elif ai_or_not.lower() == "y":
+
+        choice = str(input("Do you want to play as white or black? (w/b): "))
+
+        if choice.lower() == "w":
+            while True:
+                move = str(input("Enter a chess move in algebreic notation: "))
+                reward = env.step(move)
+
+                if reward == -10:
+                    print("Invalid move, please try again")
+                    continue
+                    
+                elif env.is_checkmate():
+                    print("You won!")
+                    exit()
+
+                action, reward = env.minimax(3, True)
+                reward = env.step(action)
+
+                if env.is_checkmate():
+                    exit()
+                
+                elif env.is_in_check():
+                    print("You're in check")
+                
+                elif env.is_stalemate():
+                    print("Stalemate, game over!")
+                    exit()
+
+                env.render()
+        elif choice.lower() == "b":   
+            while True:
+                action, reward = env.minimax(3, True)
+                reward = env.step(action)
+
+                if env.is_checkmate():
+                    exit()
+                
+                elif env.is_in_check():
+                    print("You're in check")
+
+                env.render()
+
+                move = str(input("Enter a chess move in algebreic notation: "))
+                reward = env.step(move)
+
+                if reward == -10:
+                    print("Invalid move, please try again")
+                    continue
+                    
+                elif env.is_checkmate():
+                    print("You won!")
+                    exit()
+
+                elif env.is_stalemate():
+                    print("Stalemate, game over!")
+                    exit()
+
+                env.render()
+
+    else:   
+        print("Invalid choice, please try again")
+        play_chess()
+
+if __name__ == "__main__":
+    play_chess()
